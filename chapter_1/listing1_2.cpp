@@ -7,6 +7,5 @@ int main() {
   };
   auto myThread = std::thread(lambda, 21);
   myThread.join();
-  return 0;
 }
 // Listing 1.2: Thread creation with parameters passing

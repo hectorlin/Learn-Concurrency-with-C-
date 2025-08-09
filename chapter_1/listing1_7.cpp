@@ -1,45 +1,102 @@
+#include <atomic>
+#include <iostream>
 #include <print>
 #include <thread>
 #include <vector>
-#include <atomic>
 
-using std::chrono_literals::operator""s;
-
-std::atomic_flag cancel_flag{};
-
-auto heavyComputation() {
-  auto id = std::this_thread::get_id();
-  while (not cancel_flag.test()) {
-    std::println("Thread {} is processing...", id);
-    std::this_thread::sleep_for(1s);
-  }
+auto getMaxNrOfBackgroundThreads() {
+  const auto maxThreads = std::thread::hardware_concurrency();
+  return maxThreads > 1 ? maxThreads - 1 : 1;
 }
 
-auto doWork(int maxThreads) {
-  auto threads = std::vector<std::thread>{};
-  threads.reserve(maxThreads);
-
-  for (int i = 0; i < maxThreads; i++) {
-    threads.emplace_back(heavyComputation);
+class App {
+ public:
+  explicit App(unsigned maxThreads)
+      : maxBackgroundThreads_(maxThreads) {
+    backgroundThreads_.reserve(maxThreads);
+    std::println("Using {} threads for background computation",
+                 maxBackgroundThreads_);
   }
 
-  try {
-    std::this_thread::sleep_for(5s);
-    cancel_flag.test_and_set();
-  } catch (const std::exception &e) {
-    for (auto &t : threads) {
-      t.join();
+  auto launch() -> void {
+    startBackgroundThreads();
+    startUserInteraction();
+  }
+
+  ~App() {
+    cancelAllOperations();
+    joinBackgroundThreads();
+  }
+
+ private:
+  auto startBackgroundThreads() -> void {
+    for (unsigned i = 0; i < maxBackgroundThreads_; ++i) {
+      backgroundThreads_.emplace_back(&App::heavyComputation, this,
+                                      i + 2);
     }
-    throw;
+  }
+  auto startUserInteraction() -> void {
+    try {
+      talkWithUser();
+    } catch (const std::exception& e) {
+      std::println("Exception occurred: {}", e.what());
+      std::println("Returning safely");
+    }
   }
 
-  for (auto& t : threads) {
-    t.join();
+  auto heavyComputation(int modulo) -> void {
+    std::println("Simulating computation in background");
+    auto sum = 0u;
+    for (auto i = 0u; i < 1'000'000'000u; ++i) {
+      sum += i % modulo;
+      if (cancelFlag_.test()) {
+        break;
+      }
+    }
+    std::println("Computation finished. Result: {}", sum);
   }
-}
+
+  auto talkWithUser() -> void {
+    std::println("Enter character to process (or 'q' to quit):");
+    char input;
+    while (not cancelFlag_.test()) {
+      std::cin >> input;
+      if (input == 'q') {
+        cancelFlag_.test_and_set();
+        break;
+      }
+      if (input == 'e') {
+        throw std::runtime_error("Simulated error");
+      }
+      std::println("You entered: {}", input);
+    }
+  }
+
+  auto cancelAllOperations() noexcept -> void {
+    cancelFlag_.test_and_set();
+  }
+
+  auto joinBackgroundThreads() noexcept -> void {
+    try {
+      std::println("Joining background threads...");
+      for (auto& thread : backgroundThreads_) {
+        thread.join();
+      }
+      std::println("All background threads have finished.");
+    } catch (const std::exception& e) {
+      std::println("Error joining threads: {}", e.what());
+    }
+  }
+
+ private:
+  unsigned maxBackgroundThreads_;
+  std::vector<std::thread> backgroundThreads_;
+  std::atomic_flag cancelFlag_{};
+};
 
 int main() {
-  doWork(std::thread::hardware_concurrency() - 1);
-  return 0;
+  const auto maxThreads = getMaxNrOfBackgroundThreads();
+  auto app = App{maxThreads};
+  app.launch();
 }
 // Listing 1.7: Thread cancellation

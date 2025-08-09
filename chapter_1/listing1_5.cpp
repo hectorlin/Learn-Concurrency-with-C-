@@ -1,51 +1,40 @@
+#include <iostream>
 #include <print>
 #include <thread>
-#include <vector>
 
-using std::chrono_literals::operator""s;
-
-auto prepareForResults() {
-  auto id = std::this_thread::get_id();
-  std::println("Thread {} is preparing...", id);
-}
-
-auto heavyComputation(int i) {
-  auto id = std::this_thread::get_id();
-  std::println("Thread {} is processing...", id);
-  std::this_thread::sleep_for(i * 1s);
-}
-
-auto doWork(int maxThreads) {
-  auto threads = std::vector<std::thread>{};
-  threads.reserve(maxThreads);
-
-  for (int i = 0; i < maxThreads; i++) {
-    threads.emplace_back(heavyComputation, i);
+auto heavyComputation() {
+  std::println("Simulating computation in background");
+  auto sum = 0u;
+  for (auto i = 0u; i < 1'000'000'000u; ++i) {
+    sum += i % 2;
   }
+  std::println("Computation finished. Result: {}", sum);
+}
 
-  try {
-    prepareForResults();
-  } catch (const std::exception &e) {
-    for (auto& t : threads) {
-      auto id = t.get_id();
-      std::println("Error detected, thread: {}", id);
-      t.join();
+auto talkWithUser() {
+  std::println("Enter character to process (or 'q' to quit):");
+  char input;
+  while (std::cin >> input) {
+    if (input == 'q') {
+      break;
     }
-    throw;
-  }
-
-  for (auto& t : threads) {
-    std::println("Joining thread: {}", t.get_id());
-    t.join();
+    if (input == 'e') {
+      throw std::runtime_error("Simulated error");
+    }
+    std::println("You entered: {}", input);
   }
 }
 
-int main() {
+auto launchApp() {
+  auto backgroundThread = std::thread(heavyComputation);
   try {
-    doWork(std::thread::hardware_concurrency() - 1);
-  } catch (const std::exception &e) {
-    std::print("Caught exception: {}\n", e.what());
+    talkWithUser();
+  } catch (const std::exception& e) {
+    std::println("Exception occurred: {}", e.what());
+    std::println("Returning safely");
   }
-  return 0;
+  backgroundThread.join();
 }
-// Listing 1.5: prepareForResults() wrapped in a try-catch block
+
+int main() { launchApp(); }
+// Listing 1.5: Background computation with safe thread handling

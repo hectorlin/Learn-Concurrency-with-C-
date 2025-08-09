@@ -1,37 +1,54 @@
+#include <iostream>
 #include <print>
 #include <thread>
 #include <vector>
 
-using std::chrono_literals::operator""s;
-
-auto prepareForResults() {
-  auto id = std::this_thread::get_id();
-  std::println("Thread {} is preparing...", id);
+auto getMaxNrOfBackgroundThreads() {
+  const auto maxThreads = std::thread::hardware_concurrency();
+  return maxThreads > 1 ? maxThreads - 1 : 1;
 }
 
-auto heavyComputation(int i) {
-  auto id = std::this_thread::get_id();
-  std::println("Thread {} is processing...", id);
-  std::this_thread::sleep_for(i * 1s);
-}
-
-auto doWork(int maxThreads) {
-  auto jthreads = std::vector<std::jthread>{};
-  jthreads.reserve(maxThreads);
-
-  for (int i = 0; i < maxThreads; i++)
-  {
-    jthreads.emplace_back(heavyComputation, i);
+auto heavyComputation(int modulo) {
+  std::println("Simulating computation in background");
+  auto sum = 0u;
+  for (auto i = 0u; i < 1'000'000'000u; ++i) {
+    sum += i % modulo;
   }
-  prepareForResults();
+  std::println("Computation finished. Result: {}", sum);
 }
 
-int main() {
+auto talkWithUser() {
+  std::println("Enter character to process (or 'q' to quit):");
+  char input;
+  while (std::cin >> input) {
+    if (input == 'q') {
+      break;
+    }
+    if (input == 'e') {
+      throw std::runtime_error("Simulated error");
+    }
+    std::println("You entered: {}", input);
+  }
+}
+
+auto launchApp() {
+  const auto maxBackgroundThreads = getMaxNrOfBackgroundThreads();
+  std::println("Using {} threads for background computation",
+               maxBackgroundThreads);
+
+  auto backgroundThreads = std::vector<std::jthread>{};
+  backgroundThreads.reserve(maxBackgroundThreads);
+  for (int i = 0; i < maxBackgroundThreads; i++) {
+    backgroundThreads.emplace_back(heavyComputation, i + 2);
+  }
+
   try {
-    doWork(std::thread::hardware_concurrency() - 1);
-  } catch (const std::exception &e) {
-    std::print("Caught exception: {}\n", e.what());
+    talkWithUser();
+  } catch (const std::exception& e) {
+    std::println("Exception occurred: {}", e.what());
+    std::println("Returning safely");
   }
-  return 0;
 }
-// Listing 1.6: DoWork function with an std::jthread
+
+int main() { launchApp(); }
+// Listing 1.6: Background computation with jthreads

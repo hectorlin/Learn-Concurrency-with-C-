@@ -1,36 +1,92 @@
+#include <atomic>
+#include <functional>
+#include <iostream>
 #include <print>
+#include <stop_token>
 #include <thread>
 #include <vector>
-#include <atomic>
-#include <stop_token>
 
-using std::chrono_literals::operator""s;
-
-auto heavyComputation(std::stop_token stopToken) {
-  auto id = std::this_thread::get_id();
-  while (not stopToken.stop_requested()) {
-    std::println("Thread {} is processing...", id);
-    std::this_thread::sleep_for(1s);
-  }
+auto getMaxNrOfBackgroundThreads() {
+  const auto maxThreads = std::thread::hardware_concurrency();
+  return maxThreads > 1 ? maxThreads - 1 : 1;
 }
 
-auto doWork(int maxThreads) {
-  auto jthreads = std::vector<std::jthread>{};
-  jthreads.reserve(maxThreads);
-  for (int i = 0; i < maxThreads; i++) {
-    jthreads.emplace_back(heavyComputation);
+class App {
+ public:
+  explicit App(unsigned maxThreads)
+      : maxBackgroundThreads_(maxThreads) {
+    backgroundThreads_.reserve(maxThreads);
+    std::println("Using {} threads for background computation",
+                 maxBackgroundThreads_);
   }
 
-  std::this_thread::sleep_for(5s);
-
-  for (auto& jt : jthreads) {
-    jt.request_stop();
+  auto launch() -> void {
+    startBackgroundThreads();
+    startUserInteraction();
   }
-}
 
-int main()
-{
-  doWork(std::thread::hardware_concurrency());
-  return 0;
+  ~App() { cancelAllOperations(); }
+
+ private:
+  auto startBackgroundThreads() -> void {
+    for (unsigned i = 0; i < maxBackgroundThreads_; ++i) {
+      backgroundThreads_.emplace_back(
+          std::bind_front(&App::heavyComputation, this,
+                          stopSource_.get_token()),
+          i + 2);
+    }
+  }
+
+  auto heavyComputation(std::stop_token token, int modulo) -> void {
+    std::println("Simulating computation in background");
+    auto sum = 0u;
+    for (auto i = 0u; i < 1'000'000'000u; ++i) {
+      sum += i % modulo;
+      if (token.stop_requested()) {
+        break;
+      }
+    }
+    std::println("Computation finished. Result: {}", sum);
+  }
+
+  auto startUserInteraction() -> void {
+    try {
+      talkWithUser();
+    } catch (const std::exception& e) {
+      std::println("Exception occurred: {}", e.what());
+      std::println("Returning safely");
+    }
+  }
+
+  auto talkWithUser() -> void {
+    std::println("Enter character to process (or 'q' to quit):");
+    char input;
+    while (not stopSource_.stop_requested()) {
+      std::cin >> input;
+      if (input == 'q') {
+        cancelAllOperations();
+        break;
+      }
+      if (input == 'e') {
+        throw std::runtime_error("Simulated error");
+      }
+      std::println("You entered: {}", input);
+    }
+  }
+
+  auto cancelAllOperations() noexcept -> void {
+    stopSource_.request_stop();
+  }
+
+ private:
+  unsigned maxBackgroundThreads_;
+  std::vector<std::jthread> backgroundThreads_;
+  std::stop_source stopSource_;
+};
+
+int main() {
+  const auto maxThreads = getMaxNrOfBackgroundThreads();
+  auto app = App{maxThreads};
+  app.launch();
 }
-// Listing 1.9: Using jthread with explicit stop
+// Listing 1.9: jthread stop source to stop all threads simultaneously
