@@ -31,8 +31,8 @@ class App {
  private:
   auto startBackgroundThreads() -> void {
     for (unsigned i = 0; i < maxBackgroundThreads_; ++i) {
-      backgroundThreads_.emplace_back(&App::heavyComputation, this,
-                                      i + 2);
+      backgroundThreads_.emplace_back(&App::heavyComputation,
+                                      this, i + 2);
     }
   }
   auto startUserInteraction() -> void {
@@ -88,7 +88,6 @@ class App {
     }
   }
 
- private:
   unsigned maxBackgroundThreads_;
   std::vector<std::thread> backgroundThreads_;
   std::atomic_flag cancelFlag_{};

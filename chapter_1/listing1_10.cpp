@@ -37,7 +37,8 @@ class App {
     }
   }
 
-  auto heavyComputation(std::stop_token token, int modulo) -> void {
+  auto heavyComputation(std::stop_token token, int modulo)
+      -> void {
     std::println("Simulating computation in background");
     auto sum = 0u;
     for (auto i = 0u; i < 1'000'000'000u; ++i) {
@@ -89,4 +90,4 @@ int main() {
   auto app = App{maxThreads};
   app.launch();
 }
-// Listing 1.10: jthread stop source to stop all threads simultaneously
+// Listing 1.10: Stop source to stop all threads simultaneously

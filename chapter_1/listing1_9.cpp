@@ -77,7 +77,6 @@ class App {
     }
   }
 
- private:
   unsigned maxBackgroundThreads_;
   std::vector<std::jthread> backgroundThreads_;
 };
