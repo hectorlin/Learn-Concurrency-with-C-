@@ -29,4 +29,4 @@ auto launchApp() {
 }
 
 int main() { launchApp(); }
-// Listing 1.4: Background computation with main thread activities
+// Listing 1.4: Background computation and main thread activities

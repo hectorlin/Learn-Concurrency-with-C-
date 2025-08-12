@@ -1,8 +1,6 @@
 #include <atomic>
-#include <functional>
 #include <iostream>
 #include <print>
-#include <stop_token>
 #include <thread>
 #include <vector>
 
@@ -25,16 +23,18 @@ class App {
     startUserInteraction();
   }
 
-  ~App() { cancelBackgroundOperations(); }
+  ~App() {
+    cancelAllOperations();
+    joinBackgroundThreads();
+  }
 
  private:
   auto startBackgroundThreads() -> void {
     for (unsigned i = 0; i < maxBackgroundThreads_; ++i) {
-      backgroundThreads_.emplace_back(
-          std::bind_front(&App::heavyComputation, this), i + 2);
+      backgroundThreads_.emplace_back(&App::heavyComputation, this,
+                                      i + 2);
     }
   }
-
   auto startUserInteraction() -> void {
     try {
       talkWithUser();
@@ -44,12 +44,12 @@ class App {
     }
   }
 
-  auto heavyComputation(std::stop_token token, int modulo) -> void {
+  auto heavyComputation(int modulo) -> void {
     std::println("Simulating computation in background");
     auto sum = 0u;
     for (auto i = 0u; i < 1'000'000'000u; ++i) {
       sum += i % modulo;
-      if (token.stop_requested()) {
+      if (cancelFlag_.test()) {
         break;
       }
     }
@@ -59,9 +59,10 @@ class App {
   auto talkWithUser() -> void {
     std::println("Enter character to process (or 'q' to quit):");
     char input;
-    while (std::cin >> input) {
+    while (not cancelFlag_.test()) {
+      std::cin >> input;
       if (input == 'q') {
-        cancelBackgroundOperations();
+        cancelFlag_.test_and_set();
         break;
       }
       if (input == 'e') {
@@ -71,15 +72,26 @@ class App {
     }
   }
 
-  auto cancelBackgroundOperations() noexcept -> void {
-    for (auto& thread : backgroundThreads_) {
-      thread.request_stop();
+  auto cancelAllOperations() noexcept -> void {
+    cancelFlag_.test_and_set();
+  }
+
+  auto joinBackgroundThreads() noexcept -> void {
+    try {
+      std::println("Joining background threads...");
+      for (auto& thread : backgroundThreads_) {
+        thread.join();
+      }
+      std::println("All background threads have finished.");
+    } catch (const std::exception& e) {
+      std::println("Error joining threads: {}", e.what());
     }
   }
 
  private:
   unsigned maxBackgroundThreads_;
-  std::vector<std::jthread> backgroundThreads_;
+  std::vector<std::thread> backgroundThreads_;
+  std::atomic_flag cancelFlag_{};
 };
 
 int main() {
@@ -87,4 +99,4 @@ int main() {
   auto app = App{maxThreads};
   app.launch();
 }
-// Listing 1.8: Using jthread for background cancelation
+// Listing 1.8: Thread cancellation

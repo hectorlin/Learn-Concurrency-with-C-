@@ -25,22 +25,15 @@ class App {
     startUserInteraction();
   }
 
-  ~App() { cancelBackgroundOperations(); }
+  ~App() { cancelAllOperations(); }
 
  private:
   auto startBackgroundThreads() -> void {
     for (unsigned i = 0; i < maxBackgroundThreads_; ++i) {
       backgroundThreads_.emplace_back(
-          std::bind_front(&App::heavyComputation, this), i + 2);
-    }
-  }
-
-  auto startUserInteraction() -> void {
-    try {
-      talkWithUser();
-    } catch (const std::exception& e) {
-      std::println("Exception occurred: {}", e.what());
-      std::println("Returning safely");
+          std::bind_front(&App::heavyComputation, this,
+                          stopSource_.get_token()),
+          i + 2);
     }
   }
 
@@ -56,12 +49,22 @@ class App {
     std::println("Computation finished. Result: {}", sum);
   }
 
+  auto startUserInteraction() -> void {
+    try {
+      talkWithUser();
+    } catch (const std::exception& e) {
+      std::println("Exception occurred: {}", e.what());
+      std::println("Returning safely");
+    }
+  }
+
   auto talkWithUser() -> void {
     std::println("Enter character to process (or 'q' to quit):");
     char input;
-    while (std::cin >> input) {
+    while (not stopSource_.stop_requested()) {
+      std::cin >> input;
       if (input == 'q') {
-        cancelBackgroundOperations();
+        cancelAllOperations();
         break;
       }
       if (input == 'e') {
@@ -71,15 +74,14 @@ class App {
     }
   }
 
-  auto cancelBackgroundOperations() noexcept -> void {
-    for (auto& thread : backgroundThreads_) {
-      thread.request_stop();
-    }
+  auto cancelAllOperations() noexcept -> void {
+    stopSource_.request_stop();
   }
 
  private:
   unsigned maxBackgroundThreads_;
   std::vector<std::jthread> backgroundThreads_;
+  std::stop_source stopSource_;
 };
 
 int main() {
@@ -87,4 +89,4 @@ int main() {
   auto app = App{maxThreads};
   app.launch();
 }
-// Listing 1.9: Using jthread for background cancelation
+// Listing 1.10: jthread stop source to stop all threads simultaneously
